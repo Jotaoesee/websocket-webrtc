@@ -15,3 +15,7 @@ EXPOSE 8080
 
 # Iniciar el servidor WebSocket
 CMD ["node", "server.js"]
+
+
+# para contruir el contenedor hacer : docker build -t websocket-server .
+# para runear el contenedor hacer : docker run -p 8080:8080 websocket-server
