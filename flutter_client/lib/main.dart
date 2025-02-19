@@ -45,7 +45,7 @@ class HomeScreen extends StatelessWidget {
             ElevatedButton(
               onPressed: () {
                 Navigator.push(context,
-                    MaterialPageRoute(builder: (context) => WebRTCScreen()));
+                    MaterialPageRoute(builder: (context) => WebRTCChat()));
               },
               child:
                   Text("Iniciar WebRTC", style: TextStyle(color: Colors.white)),
@@ -130,70 +130,109 @@ class _WebSocketScreenState extends State<WebSocketScreen> {
   }
 }
 
-class WebRTCScreen extends StatefulWidget {
+// ------------------------ VIDEO CHAT CON WEBRTC ------------------------
+class WebRTCChat extends StatefulWidget {
   @override
-  _WebRTCScreenState createState() => _WebRTCScreenState();
+  _WebRTCChatState createState() => _WebRTCChatState();
 }
 
-class _WebRTCScreenState extends State<WebRTCScreen> {
+class _WebRTCChatState extends State<WebRTCChat> {
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
   RTCPeerConnection? _peerConnection;
-  MediaStream? _localStream;
+  RTCDataChannel? _dataChannel;
+  final TextEditingController _messageController = TextEditingController();
+  List<String> messages = [];
 
   @override
   void initState() {
     super.initState();
-    _initializeWebRTC();
+    _initRenderers();
+    _setupWebRTC();
   }
 
-  Future<void> _initializeWebRTC() async {
+  Future<void> _initRenderers() async {
     await _localRenderer.initialize();
     await _remoteRenderer.initialize();
-    _localStream = await navigator.mediaDevices
+  }
+
+  Future<void> _setupWebRTC() async {
+    final configuration = {
+      'iceServers': [
+        {'urls': 'stun:stun.l.google.com:19302'},
+        {
+          'urls': 'turn:localhost:3478',
+          'username': 'user',
+          'credential': 'supersecretkey'
+        },
+      ]
+    };
+
+    _peerConnection = await createPeerConnection(configuration);
+    _peerConnection!.onIceCandidate = (candidate) {
+      print("Nuevo ICE Candidate: ${candidate.toMap()}");
+    };
+
+    _dataChannel =
+        await _peerConnection!.createDataChannel("chat", RTCDataChannelInit());
+
+    _dataChannel!.onMessage = (RTCDataChannelMessage message) {
+      setState(() {
+        messages.add("Otro: ${message.text}");
+      });
+    };
+
+    final localStream = await navigator.mediaDevices
         .getUserMedia({'video': true, 'audio': true});
-    _localRenderer.srcObject = _localStream;
+    _localRenderer.srcObject = localStream;
+    _peerConnection!.addStream(localStream);
+  }
+
+  void _sendMessage() {
+    if (_messageController.text.isNotEmpty) {
+      _dataChannel!.send(RTCDataChannelMessage(_messageController.text));
+      setState(() {
+        messages.add("Tú: ${_messageController.text}");
+      });
+      _messageController.clear();
+    }
   }
 
   @override
   void dispose() {
     _localRenderer.dispose();
     _remoteRenderer.dispose();
-    _peerConnection?.dispose();
-    _localStream?.dispose();
+    _peerConnection?.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("WebRTC")),
+      appBar: AppBar(title: Text("Video Chat con WebRTC")),
       body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          Expanded(child: RTCVideoView(_localRenderer)),
+          Expanded(child: RTCVideoView(_remoteRenderer)),
           Expanded(
-            child: Container(
-              margin: EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.deepPurpleAccent, width: 2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: RTCVideoView(_localRenderer, mirror: true),
+            child: ListView.builder(
+              itemCount: messages.length,
+              itemBuilder: (context, index) {
+                return ListTile(title: Text(messages[index]));
+              },
             ),
           ),
-          SizedBox(height: 10),
-          Text("Vista Remota",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
-                  .copyWith(color: Colors.white)),
-          Expanded(
-            child: Container(
-              margin: EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.deepPurpleAccent, width: 2),
-                borderRadius: BorderRadius.circular(10),
+          Padding(
+            padding: EdgeInsets.all(8.0),
+            child: TextField(
+              controller: _messageController,
+              decoration: InputDecoration(
+                labelText: "Escribe un mensaje",
+                suffixIcon: IconButton(
+                  icon: Icon(Icons.send),
+                  onPressed: _sendMessage,
+                ),
               ),
-              child: RTCVideoView(_remoteRenderer),
             ),
           ),
         ],
