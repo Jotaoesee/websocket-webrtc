@@ -132,7 +132,10 @@ class _WebSocketScreenState extends State<WebSocketScreen> {
 
 // ------------------------ VIDEO CHAT CON WEBRTC ------------------------
 class WebRTCChat extends StatefulWidget {
+  const WebRTCChat({super.key});
+
   @override
+  // ignore: library_private_types_in_public_api
   _WebRTCChatState createState() => _WebRTCChatState();
 }
 
